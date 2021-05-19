@@ -1,2 +1,3 @@
-# nicolas_s2021
-This repo will be used to store most of the code I make during my internship (summer 2021)
+# Nicolas  (Summer 2021)
+
+Not much to see here for now, just pushing some of the code I make for easier access and safekeeping
