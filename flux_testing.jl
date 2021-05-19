@@ -76,6 +76,7 @@ testing_out = [goblin(input) for input in testing_in]
 # Making a plot to visualise results
 set_default_plot_size(30cm, 30cm)
 vstack(
-plot(layer(x=1:length(losses), y=losses, Geom.line, Guide.xlabel("Iter"), Guide.ylabel("loss")),
-     layer(x=1:length(testing_losses), y=testing_losses, Geom.line, Theme(default_color=color("orange")))),
+plot(layer(x=1:length(losses), y=losses, Geom.line),
+     layer(x=1:length(testing_losses), y=testing_losses, Geom.line, Theme(default_color=color("orange"))),
+     Guide.xlabel("Iter"), Guide.ylabel("loss")),
 plot(x=hcat(testing_expected_out...), y=hcat(testing_out...), Geom.point, Guide.xlabel("expected"), Guide.ylabel("obtained")))
