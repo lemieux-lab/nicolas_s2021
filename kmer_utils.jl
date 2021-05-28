@@ -1,22 +1,24 @@
 using Flux
 using ProgressBars
-using JDF
+using HDF5
 using DataFrames
 
 # Opens a kmer count dump file from jellyfish and parses it into a dataframe
 function parse_kmer_count(path::String; min_count::Int64=0, max_lines::Int64=-1)
     open(path) do file
-        kmers = String[]
+        kmers = Vector{Bool}[]
         counts = Int32[]
-        buffer = ""
         for (i, line) in ProgressBar(enumerate(eachline(file)))
             if max_lines != -1 && i > max_lines
                 break
             end
             if i%2 == 0
                 stripped_kmer = String(strip(line))
-                push!(kmers, stripped_kmer)
-                # push!(kmers, onehot_kmer(stripped_kmer))
+                # push!(kmers, stripped_kmer)
+                # println(onehot_kmer(stripped_kmer))
+                # return
+                push!(kmers, onehot_kmer(stripped_kmer))
+                # kmers = [kmers; onehot_kmer(stripped_kmer)]
                 
             else
                 count =  parse(Int32, line[2:length(line)])
@@ -26,8 +28,7 @@ function parse_kmer_count(path::String; min_count::Int64=0, max_lines::Int64=-1)
                 push!(counts, count)
             end
         end
-        println(typeof(kmers))
-        return DataFrame(kmers=kmers, counts=counts)
+        return @time hcat(kmers...), counts
     end
 end
 
@@ -52,7 +53,23 @@ function split_kmer_df(df::DataFrame, split_indice::Int64)
     return df[1:split_index, [:kmers, :counts]], df[split_index+1:nrow(df), [:kmers, :counts]]
 end
 
+function kmer_to_hdf5(kmer_file::String, output_file::String, dataset_name::String; min_count::Int64=0, max_lines::Int64=-1)
+    kmers, counts = parse_kmer_count(kmer_file, min_count=min_count, max_lines=max_lines)
+    # println(hcat(kmers...)[1])
+    h5open(output_file, "w") do h5_file
+        @time create_group(h5_file, "kmers")
+        @time create_group(h5_file, "counts")
+        @time h5_file["kmers"]["kmers"] = kmers
+        @time h5_file["counts"]["counts"] = counts
+    end
+end
+
 # parsed_df = parse_kmer_count("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_min-5.FASTA", max_lines = 300000)
-# @time JDF.save("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_DataFrame_min-5_300k.JDF", parsed_df)
+
+# ↓ About 8.5 hours. Parses then saves the entire dataset with onehot encoded kmers in a hdf5 file.
+# ↓ GC time is over 73%, this needs to be dealt with.
+# @time kmer_to_hdf5("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_min-5.FASTA", 
+#                    "/home/golem/rpool/scratch/jacquinn/data/encoded_kmer_counts.h5", 
+#                    "13H107-k31_min-5")
 
 
