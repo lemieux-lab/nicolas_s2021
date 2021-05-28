@@ -53,14 +53,22 @@ function split_kmer_df(df::DataFrame, split_indice::Int64)
     return df[1:split_index, [:kmers, :counts]], df[split_index+1:nrow(df), [:kmers, :counts]]
 end
 
+function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Int32, 1}, split_indice::Int64)
+    if split_indice > 100 || split_indice < 1
+        return
+    end
+    split_index = (length(counts)*split_indice)÷100
+    return kmers[:, 1:split_index], counts[1:split_index], kmers[:, split_index+1:end], counts[split_index+1, end]
+end
+
 function kmer_to_hdf5(kmer_file::String, output_file::String, dataset_name::String; min_count::Int64=0, max_lines::Int64=-1)
     kmers, counts = parse_kmer_count(kmer_file, min_count=min_count, max_lines=max_lines)
     # println(hcat(kmers...)[1])
     h5open(output_file, "w") do h5_file
         @time create_group(h5_file, "kmers")
         @time create_group(h5_file, "counts")
-        @time h5_file["kmers"]["kmers"] = kmers
-        @time h5_file["counts"]["counts"] = counts
+        @time h5_file["kmers"][dataset_name] = kmers
+        @time h5_file["counts"][dataset_name] = counts
     end
 end
 
