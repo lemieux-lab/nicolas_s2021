@@ -14,7 +14,6 @@ function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Int3
     dl = Flux.Data.DataLoader((kmers, counts), batchsize=1000)
     total = Array{Float32, 1}()
     for (i, e) in dl
-        # println(loss(device(i), device(e)))
         push!(total, loss(device(i), device(e)))
     end
     return mean(total)
@@ -32,10 +31,6 @@ end
 function neural_network(k::Int64=31)
     return Chain(
             Dense(4*k, 4*k÷2, x->σ.(x)),
-            # Dense(200, 150, x->relu.(x)),
-            # Dense(150, 100, x->relu.(x)),
-            # Dense(100, 50, relu),
-            # Dense(50, 25, x->σ.(x)),
             Dense(4*k÷2, 1, identity)
             )
 end
@@ -48,79 +43,73 @@ function train_and_plot(; plot_every::Int64=10, use_log_count::Bool=false, devic
     all_counts = read(h5_file["counts/13H107-k31_min-5_ALL"])
     close(h5_file)
     i_train, e_train, i_test, e_test = split_kmer_data(all_kmers, all_counts, 75)
-    println(mean(e_train))
-    set_default_plot_size(30cm, 30cm)
-    # @time training_df, testing_df = split_kmer_df(raw_counts, 75)
-
-    # @time i_train, e_train = create_flux_sets(training_df)
-    # @time i_test, e_test = create_flux_sets(testing_df)
-    # @time i_train, e_train = onehot_kmer.(training_df[!, "kmers"]), training_df[!, "counts"]
-    # @time i_test, e_test = onehot_kmer.(testing_df[!, "kmers"]), testing_df[!, "counts"]
-    # @time i_train, e_train = parse_saved_onehot_kmers(training_df[!, "kmers"]), training_df[!, "counts"]
-    # @time i_test, e_test = parse_saved_onehot_kmers(testing_df[!, "kmers"]), testing_df[!, "counts"]
-
-    # i_train |> device
-    # e_train |> device
-    # i_test |> device
-    # e_test |> device
+    # println(mean(e_train))
 
     network = neural_network() |> device
-    loss(input, expected) = Flux.Losses.mse(network(input), expected)
-    # function loss(input, expected)
-    #     println("input:", input)
-    #     l = Flux.Losses.mse(network(input), expected)
-    #     return l
-    # end
-    # println(i_train[1, :])
+    # println(network[1])
+    # println(network[2].W)
+
+    function L2_penalty() # = sum(sum.(abs2, network.W)) + sum(sum.(abs2, network.b))
+        penalty = 0
+        for layer in network
+            penalty += sum(layer.W) + sum(layer.b)
+        end
+        return penalty
+    end
+
+    # println(L2_penalty())
+    loss(input, expected) = Flux.Losses.mse(network(input), expected) + L2_penalty()
     dl_train = Flux.Data.DataLoader((i_train, e_train), batchsize=1000, shuffle=true)
-    opt = Flux.ADAM(0.1)
+    opt = Flux.ADAM()
     ps = Flux.params(network)
-    # return 
+
     # Empty lists that will contain loss values over iterations (for plotting)
     losses = Float32[]
     testing_losses = Float32[]
     
+    #=
+    These 3 are here so I can quickly see what the newtork outputs for a 113k count kmer,
+    a 14 counts kmer and a kmer that's not in the dataset
+    =#
     prepared_test_kmers= gpu([onehot_kmer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
                           onehot_kmer("ACTGCTTATATATGTATCCTTCAACAATATA"),
                           onehot_kmer("ACATGTAACAGTAGATACACAAGAATACAAC")])
 
-    # println(loss.(eachcol(i_train), eachcol(e_train)))
-
-    # Main training loop
+    # Main training loop starts
     epoch = 0
-    cur_loss = "N/A"
     start_time = now()
     while true
         epoch_start_time = now()
         epoch += 1
-        # cur_loss = evaluate_loss(loss, i_train, e_train, device=device)
+
+        # Evaluates loss on training & testing sets
         push!(losses, evaluate_loss(loss, i_train, e_train, device=device))
         push!(testing_losses, evaluate_loss(loss, i_test, e_test, device=device))
+
+        # Iterates over the dataset to train the NN
         for (i, e) in ProgressBar(dl_train)
-            if use_log_count
+            if use_log_count  # BAD
                 e = log.(e)
             end
             gs = gradient(ps) do
-                # println(i)
-                # println(length(i))
-                # println(i[:, 1])
-                # println(i[1, :])
-                # println(i[1])
                 loss(device(i), device(e))
             end
             Flux.update!(opt, ps, gs)
         end
 
+        # Tests for the 3 prepped kmers
         for prep in prepared_test_kmers
             println(network(prep))
         end
 
+        # Plots loss tracking data every X epoch
         if epoch % plot_every == 0
             results = plot(layer(x=1:length(losses), y=losses, Geom.line),
             layer(x=1:length(testing_losses), y=testing_losses, Geom.line, Theme(default_color=color("orange"))),
             Guide.xlabel("Iter"), Guide.ylabel("loss"))
-            draw(PNG("/u/jacquinn/graphs/week-end_run/results_13H107_min-5_ALL_epoch-$(epoch).png", 50cm, 50cm), results)
+            draw(PNG("/u/jacquinn/graphs/L2_and_log_counts/results_13H107_min-5_ALL_epoch-$(epoch).png", 50cm, 50cm), results)
         end
+
         println("current epoch: $(epoch)\nepoch runtime: $(now()-epoch_start_time)\nglobal runtime: $(now()-start_time)\n\n\n")
         flush(stdout)
     end
@@ -139,4 +128,4 @@ function train_and_plot(; plot_every::Int64=10, use_log_count::Bool=false, devic
 
 end
 
-train_and_plot(plot_every=5, device=gpu)
+train_and_plot(plot_every=5, device=gpu, use_log_count=true)
