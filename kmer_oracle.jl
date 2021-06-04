@@ -41,6 +41,15 @@ function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Floa
     return mean(total)
 end
 
+function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Int32, 1}; device::Function=cpu)
+    dl = Flux.Data.DataLoader((kmers, counts), batchsize=1000)
+    total = Array{Float32, 1}()
+    for (i, e) in dl
+        push!(total, loss(device(i), device(e)))
+    end
+    return mean(total)
+end
+
 function evaluate_results(network, testing_set::Array{Bool, 2}; device::Function=cpu)
     o_test = Array{Float32, 1}()
     dl = Flux.Data.DataLoader(testing_set, batchsize=1000)
