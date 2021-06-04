@@ -62,20 +62,12 @@ function onehot_kmer(kmer::String)
     return vcat(Flux.onehotbatch(kmer, ["A", "T", "G", "C"])...)
 end
 
-# Transformer le DF en sets utilisable par le neural net
-function create_flux_sets(kmer_df::DataFrame)
-    kmers = onehot_kmer.(kmer_df[!, "kmers"])
-    counts = kmer_df[!, "counts"]
-    return kmers, counts
-end
-
-# Splits the DF into 2 based on a percentage
-function split_kmer_df(df::DataFrame, split_indice::Int64)
+function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Float64, 1}, split_indice::Int64)
     if split_indice > 100 || split_indice < 1
         return
     end
-    split_index = (nrow(df)*split_indice)÷100
-    return df[1:split_index, [:kmers, :counts]], df[split_index+1:nrow(df), [:kmers, :counts]]
+    split_index = (length(counts)*split_indice)÷100
+    return kmers[:, 1:split_index], counts[1:split_index], kmers[:, split_index+1:end], counts[split_index+1:end]
 end
 
 function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Int32, 1}, split_indice::Int64)
@@ -101,9 +93,10 @@ end
 
 # parsed_df = parse_kmer_count("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_min-5.FASTA", max_kmers = 300000)
 
-# ↓ About 2 hours. Parses then saves the entire dataset with onehot encoded kmers in a hdf5 file.
-@time kmer_to_hdf5("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_min-5.FASTA", 
-                   "/home/golem/rpool/scratch/jacquinn/data/13H107-k31.h5", 
-                   "13H107-k31_min-5_ALL")
+# ↓ About 8.5 hours. Parses then saves the entire dataset with onehot encoded kmers in a hdf5 file.
+# ↓ GC time is over 73%, this needs to be dealt with.
+# @time kmer_to_hdf5("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_min-5.FASTA", 
+#                    "/home/golem/rpool/scratch/jacquinn/data/13H107-k31.h5", 
+#                    "13H107-k31_min-5_ALL")
 
 
