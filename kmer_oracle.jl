@@ -103,6 +103,9 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
 
     # Splitting into sets
     i_train, e_train, i_test, e_test = split_kmer_data(all_kmers, all_counts, 75)
+    # println(onehot_kmer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") in eachcol(i_train))
+    # println(onehot_kmer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") in eachcol(i_test))
+
 
     # Preparing hyperparams
     network = neural_network() |> device
@@ -170,6 +173,8 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
 
         #Show reports
         println("current epoch: $(epoch)\nepoch runtime: $(now()-epoch_start_time)\nglobal runtime: $(now()-start_time)\n\n\n")
+        println(network(device(onehot_kmer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"))))
+        println(network(device(onehot_kmer("ACTGCTTATATATGTATCCTTCAACAATATA"))))
         if nohup
             flush(stdout)
         end
@@ -182,9 +187,9 @@ dataset = "13H107-k31_min-5_ALL"
 data = Datafile(file, dataset)
 
 # Hyperparams struct
-hyper = Hyperparams()
+hyper = Hyperparams(training_rate=0.00001, use_log_counts=false)
 
 # Plotparams struct
-visu = Plotparams(plot_every=2, plot_path="/u/jacquinn/graphs/L2_and_log/")
+visu = Plotparams(plot_every=2,plot_path="/u/jacquinn/graphs/L2_no_log_0.00001_tr/" ,show_plots=false)
 
 train_and_plot(data, hyper, visu, device=gpu, nohup=true)
