@@ -6,11 +6,33 @@ using Statistics
 using HDF5
 using Cairo
 using Dates
+using JLD2
+using FileIO
 
 include("kmer_utils.jl")
 CUDA.allowscalar(false)
 
-function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Int32, 1}; device::Function=cpu)
+Base.@kwdef struct Hyperparams
+    training_rate::Float32=0.01
+    batchsize::Int64=1000
+    use_log_counts::Bool=true
+end
+
+Base.@kwdef struct Datafile
+    path::String
+    dataset::String
+end
+
+Base.@kwdef struct Plotparams
+    plot_loss::Bool=true
+    plot_covariance::Bool=true
+    show_plots::Bool=true
+    save_plots::Bool=true
+    plot_path::String=""
+    plot_every::Int32=5
+end
+
+function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Float64, 1}; device::Function=cpu)
     dl = Flux.Data.DataLoader((kmers, counts), batchsize=1000)
     total = Array{Float32, 1}()
     for (i, e) in dl
@@ -31,51 +53,70 @@ end
 function neural_network(k::Int64=31)
     return Chain(
             Dense(4*k, 4*k÷2, x->σ.(x)),
-            Dense(4*k÷2, 1, identity)
+            Dense(4*k÷2, 4*k÷4, x->σ.(x)),
+            Dense(4*k÷4, 1, identity)
             )
 end
 
-function train_and_plot(; plot_every::Int64=10, use_log_count::Bool=false, device::Function=cpu)
+function plot_loss(train_losses::Vector{Float32}, test_losses::Vector{Float32})
+    df = DataFrame(train = train_losses, test = test_losses, epoch=0:length(train_losses)-1)
+    graph = plot(stack(df, [:train, :test]), x=:epoch, y=:value, 
+            color=:variable, Guide.xlabel("Epoch"), Guide.ylabel("Loss"), 
+            Guide.title("Loss per epoch"), Theme(panel_fill="white"), Geom.line)
+    return graph
+end
 
-    # @time raw_counts = DataFrame(JDF.load("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_DataFrame_min-5_300k.jld2"))
-    h5_file = h5open("/home/golem/rpool/scratch/jacquinn/data/13H107-k31.h5", "r")
-    all_kmers = read(h5_file["kmers/13H107-k31_min-5_ALL"])
-    all_counts = read(h5_file["counts/13H107-k31_min-5_ALL"])
-    close(h5_file)
-    i_train, e_train, i_test, e_test = split_kmer_data(all_kmers, all_counts, 75)
-    # println(mean(e_train))
+function plot_covariance(covariances::Vector{Float32})
+    df = DataFrame(covar = covariances, epoch = 0:length(covariances)-1)
+    graph = plot(df, x=:epoch, y=:covar, Guide.xlabel("Epoch"), Guide.ylabel("Covariance"), 
+    Guide.title("Covariance per epoch"), Theme(panel_fill="white"), Geom.line)
+    return graph
+end
 
-    network = neural_network() |> device
-    # println(network[1])
-    # println(network[2].W)
+function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; device::Function=cpu, nohup::Bool=false)
 
+    # This calculates an L2 regularization for the loss
     function L2_penalty() # = sum(sum.(abs2, network.W)) + sum(sum.(abs2, network.b))
         penalty = 0
         for layer in network
-            penalty += sum(layer.W) + sum(layer.b)
+            penalty += sum(abs2, layer.W) + sum(abs2, layer.b)
         end
         return penalty
     end
 
-    # println(L2_penalty())
+    # Saving params if plots are saved aswell
+    if visu.save_plots
+        JLD2.save("$(visu.plot_path)params.jld2", 
+                  Dict("hyper"=>hyper, "visu"=>visu, "data"=>data))
+    end
+
+    # Reading data
+    h5_file = h5open(data.path, "r")
+    all_kmers = read(h5_file["kmers/$(data.dataset)"])
+    all_counts = read(h5_file["counts/$(data.dataset)"])
+    close(h5_file)
+
+    # Apply log counts
+    if hyper.use_log_counts
+        all_counts = log.(all_counts)
+    end
+
+    # Splitting into sets
+    i_train, e_train, i_test, e_test = split_kmer_data(all_kmers, all_counts, 75)
+
+    # Preparing hyperparams
+    network = neural_network() |> device
     loss(input, expected) = Flux.Losses.mse(network(input), expected) + L2_penalty()
-    dl_train = Flux.Data.DataLoader((i_train, e_train), batchsize=1000, shuffle=true)
-    opt = Flux.ADAM()
+    dl_train = Flux.Data.DataLoader((i_train, e_train), batchsize=hyper.batchsize, shuffle=true)
+    opt = Flux.ADAM(hyper.training_rate)
     ps = Flux.params(network)
 
     # Empty lists that will contain loss values over iterations (for plotting)
     losses = Float32[]
     testing_losses = Float32[]
+    covariances = Float32[]
     
-    #=
-    These 3 are here so I can quickly see what the newtork outputs for a 113k count kmer,
-    a 14 counts kmer and a kmer that's not in the dataset
-    =#
-    prepared_test_kmers= gpu([onehot_kmer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
-                          onehot_kmer("ACTGCTTATATATGTATCCTTCAACAATATA"),
-                          onehot_kmer("ACATGTAACAGTAGATACACAAGAATACAAC")])
-
-    # Main training loop starts
+    # This is where the fun begins. Main training loop
     epoch = 0
     start_time = now()
     while true
@@ -83,49 +124,67 @@ function train_and_plot(; plot_every::Int64=10, use_log_count::Bool=false, devic
         epoch += 1
 
         # Evaluates loss on training & testing sets
-        push!(losses, evaluate_loss(loss, i_train, e_train, device=device))
-        push!(testing_losses, evaluate_loss(loss, i_test, e_test, device=device))
+        if visu.plot_loss
+            push!(losses, evaluate_loss(loss, i_train, e_train, device=device))
+            push!(testing_losses, evaluate_loss(loss, i_test, e_test, device=device))
+        end
+
+        if visu.plot_covariance
+            push!(covariances, cov(evaluate_results(network, i_test, device=device), e_test))
+        end
+
+        if nohup
+            iter = dl_train
+        else
+            iter = ProgressBar(dl_train)
+        end
 
         # Iterates over the dataset to train the NN
-        for (i, e) in ProgressBar(dl_train)
-            if use_log_count  # BAD
-                e = log.(e)
-            end
+        for (i, e) in iter
             gs = gradient(ps) do
                 loss(device(i), device(e))
             end
             Flux.update!(opt, ps, gs)
         end
 
-        # Tests for the 3 prepped kmers
-        for prep in prepared_test_kmers
-            println(network(prep))
-        end
-
         # Plots loss tracking data every X epoch
-        if epoch % plot_every == 0
-            results = plot(layer(x=1:length(losses), y=losses, Geom.line),
-            layer(x=1:length(testing_losses), y=testing_losses, Geom.line, Theme(default_color=color("orange"))),
-            Guide.xlabel("Iter"), Guide.ylabel("loss"))
-            draw(PNG("/u/jacquinn/graphs/L2_and_log_counts/results_13H107_min-5_ALL_epoch-$(epoch).png", 50cm, 50cm), results)
+        if visu.plot_loss && (epoch % visu.plot_every == 0)
+            loss_graph = plot_loss(losses, testing_losses)
+            if visu.save_plots
+                draw(PNG("$(visu.plot_path)loss_at_epoch-$(epoch).png"), loss_graph)
+            end
+            if visu.show_plots
+                draw(PNG(), loss_graph)
+            end
         end
 
+        if visu.plot_covariance && (epoch % visu.plot_every == 0)
+            covar_graph = plot_covariance(covariances)
+            if visu.save_plots
+                draw(PNG("$(visu.plot_path)covariance_at_epoch-$(epoch).png"), covar_graph)
+            end
+            if visu.show_plots
+                draw(PNG(), covar_graph)
+            end
+        end
+
+        #Show reports
         println("current epoch: $(epoch)\nepoch runtime: $(now()-epoch_start_time)\nglobal runtime: $(now()-start_time)\n\n\n")
-        flush(stdout)
+        if nohup
+            flush(stdout)
+        end
     end
-
-    # o_test = evaluate_results(network, i_test, device=device)
-
-    # Making a plot to visualise results
-    
-    # results = vstack(
-    # plot(layer(x=1:length(losses), y=losses, Geom.line),
-    #     layer(x=1:length(testing_losses), y=testing_losses, Geom.line, Theme(default_color=color("orange"))),
-    #     Guide.xlabel("Iter"), Guide.ylabel("loss")),
-    # plot(x=hcat(e_test...), y=hcat(o_test...), Geom.point,
-    #     Guide.xlabel("expected"), Guide.ylabel("obtained"))
-    # )
-
 end
 
-train_and_plot(plot_every=5, device=gpu, use_log_count=true)
+# Datafile struct
+file = "/home/golem/rpool/scratch/jacquinn/data/13H107-k31.h5"
+dataset = "13H107-k31_min-5_ALL"
+data = Datafile(file, dataset)
+
+# Hyperparams struct
+hyper = Hyperparams()
+
+# Plotparams struct
+visu = Plotparams(plot_every=2, plot_path="/u/jacquinn/graphs/L2_and_log/")
+
+train_and_plot(data, hyper, visu, device=gpu)
