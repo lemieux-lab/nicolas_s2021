@@ -25,7 +25,7 @@ end
 
 Base.@kwdef struct Plotparams
     plot_loss::Bool=true
-    plot_covariance::Bool=true
+    plot_correlation::Bool=true
     show_plots::Bool=true
     save_plots::Bool=true
     plot_path::String=""
@@ -66,10 +66,10 @@ function plot_loss(train_losses::Vector{Float32}, test_losses::Vector{Float32})
     return graph
 end
 
-function plot_covariance(covariances::Vector{Float32})
-    df = DataFrame(covar = covariances, epoch = 0:length(covariances)-1)
-    graph = plot(df, x=:epoch, y=:covar, Guide.xlabel("Epoch"), Guide.ylabel("Covariance"), 
-    Guide.title("Covariance per epoch"), Theme(panel_fill="white"), Geom.line)
+function plot_correlation(correlations::Vector{Float32})
+    df = DataFrame(correl = correlations, epoch = 0:length(correlations)-1)
+    graph = plot(df, x=:epoch, y=:correl, Guide.xlabel("Epoch"), Guide.ylabel("Corellation"), 
+    Guide.title("Corellation per epoch"), Theme(panel_fill="white"), Geom.line)
     return graph
 end
 
@@ -98,7 +98,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
 
     # Apply log counts
     if hyper.use_log_counts
-        all_counts = log.(all_counts)
+        all_counts = log.(10, all_counts)
     end
 
     # Splitting into sets
@@ -114,7 +114,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
     # Empty lists that will contain loss values over iterations (for plotting)
     losses = Float32[]
     testing_losses = Float32[]
-    covariances = Float32[]
+    correlations = Float32[]
     
     # This is where the fun begins. Main training loop
     epoch = 0
@@ -129,8 +129,8 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
             push!(testing_losses, evaluate_loss(loss, i_test, e_test, device=device))
         end
 
-        if visu.plot_covariance
-            push!(covariances, cov(evaluate_results(network, i_test, device=device), e_test))
+        if visu.plot_correlation
+            push!(correlations, cor(evaluate_results(network, i_test, device=device), e_test))
         end
 
         if nohup
@@ -158,13 +158,13 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
             end
         end
 
-        if visu.plot_covariance && (epoch % visu.plot_every == 0)
-            covar_graph = plot_covariance(covariances)
+        if visu.plot_correlation && (epoch % visu.plot_every == 0)
+            correl_graph = plot_correlation(correlations)
             if visu.save_plots
-                draw(PNG("$(visu.plot_path)covariance_at_epoch-$(epoch).png"), covar_graph)
+                draw(PNG("$(visu.plot_path)correlation_at_epoch-$(epoch).png"), correl_graph)
             end
             if visu.show_plots
-                draw(PNG(), covar_graph)
+                draw(PNG(), correl_graph)
             end
         end
 
@@ -187,4 +187,4 @@ hyper = Hyperparams()
 # Plotparams struct
 visu = Plotparams(plot_every=2, plot_path="/u/jacquinn/graphs/L2_and_log/")
 
-train_and_plot(data, hyper, visu, device=gpu)
+train_and_plot(data, hyper, visu, device=gpu, nohup=true)
