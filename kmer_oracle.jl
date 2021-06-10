@@ -16,7 +16,6 @@ Base.@kwdef struct Hyperparams
     training_rate::Float32=0.001
     batchsize::Int64=2048
     use_log_counts::Bool=true
-    use_square_counts::Bool=false
     l2_multiplier::Float32=1
 end
 
@@ -36,8 +35,8 @@ Base.@kwdef struct Plotparams
     accuracy_subset::Int32=100000
 end
 
-function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Float64, 1}; device::Function=cpu)
-    dl = Flux.Data.DataLoader((kmers, counts), batchsize=1000)
+function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Float64, 2}; device::Function=cpu)
+    dl = Flux.Data.DataLoader((kmers, counts), batchsize=2048)
     total = Array{Float32, 1}()
     for (i, e) in dl
         push!(total, loss(device(i), device(e)))
@@ -45,8 +44,8 @@ function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Floa
     return mean(total)
 end
 
-function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Int32, 1}; device::Function=cpu)
-    dl = Flux.Data.DataLoader((kmers, counts), batchsize=1000)
+function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Int32, 2}; device::Function=cpu)
+    dl = Flux.Data.DataLoader((kmers, counts), batchsize=2048)
     total = Array{Float32, 1}()
     for (i, e) in dl
         push!(total, loss(device(i), device(e)))
@@ -56,7 +55,7 @@ end
 
 function evaluate_results(network, testing_set::Array{Bool, 2}; device::Function=cpu)
     o_test = Array{Float32, 1}()
-    dl = Flux.Data.DataLoader(testing_set, batchsize=1000)
+    dl = Flux.Data.DataLoader(testing_set, batchsize=2048)
     for i in dl
         push!(o_test, cpu(network(device(i)))...)
     end
@@ -65,10 +64,10 @@ end
 
 function neural_network(k::Int64=31)
     return Chain(
-            Dense(4*k, 500, x->σ.(x)),
-            Dense(500, 250, x->σ.(x)),
+            Dense(4*k, 700, relu),
+            Dense(700, 350, relu),
             # Dense(4*k÷4, 4*k÷8, relu),
-            Dense(250, 1, identity)
+            Dense(350, 1, identity)
             )
 end
 
@@ -93,7 +92,7 @@ function plot_accuracy(obtained, expected, subset, epoch)
     sub_expected = expected[subset_indexes]
     graph = plot(x=sub_expected, y=sub_obtained, 
             Guide.xlabel("Expected"), Guide.ylabel("Obtained"),
-            Guide.title("Accuracy at epoch $epoch"), Theme(panel_fill="white"),
+            Guide.title("Accuracy at epoch $(epoch-1)"), Theme(panel_fill="white"),
             Geom.point)
     return graph
 end
@@ -105,7 +104,7 @@ function read_files(data::Datafile; k::Int64=31, nohup::Bool=false)
     iter = zip(data.paths, data.datasets)
     if !nohup
         iter = ProgressBar(iter) 
-        set_description(iter, "Reading through datafiles...")
+        set_description(iter, "Loading datafiles...")
     end
     for (path, ds) in iter
         h5open(path, "r") do h5_file
@@ -140,25 +139,33 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
     # all_counts = read(h5_file["counts/$(data.dataset)"])
     # close(h5_file)
     all_kmers, all_counts = read_files(data, nohup=nohup)
+    
 
     # Apply log counts
     if hyper.use_log_counts
         all_counts = log.(10, all_counts)
     end
 
-    if hyper.use_square_counts
-        all_counts = all_counts.^2
-    end
-
     # Splitting into sets
     i_train, e_train, i_test, e_test = split_kmer_data(all_kmers, all_counts, 97)
+    e_train = reshape(e_train, 1, length(e_train))
+    e_test = reshape(e_test, 1, length(e_test))
     # println(onehot_kmer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") in eachcol(i_train))
     # println(onehot_kmer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") in eachcol(i_test))
 
+    # function loss(input, expected)
+    #     println("input:", input)
+    #     obtained = network(input)
+    #     println("obtained: ", obtained)
+    #     println("expected: ", expected)
+    #     val = Flux.Losses.mse(obtained, expected) + (L2_penalty() * hyper.l2_multiplier)
+    #     println(val)
+    #     return val
+    # end
 
     # Preparing hyperparams
     network = neural_network() |> device
-    loss(input, expected) = Flux.Losses.mae(network(input), expected) + (L2_penalty() * hyper.l2_multiplier)
+    loss(input, expected) = Flux.Losses.mse(network(input), expected, agg=sum) + (L2_penalty() * hyper.l2_multiplier)
     dl_train = Flux.Data.DataLoader((i_train, e_train), batchsize=hyper.batchsize, shuffle=true)
     opt = Flux.ADAM(hyper.training_rate)
     ps = Flux.params(network)
@@ -203,6 +210,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
 
         # Iterates over the dataset to train the NN
         for (i, e) in iter
+            # e = reshape(e, 1, length(e))
             gs = gradient(ps) do
                 loss(device(i), device(e))
             end
@@ -213,7 +221,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
         if visu.plot_loss && (epoch % visu.plot_every == 0)
             loss_graph = plot_loss(losses, testing_losses)
             if visu.save_plots
-                draw(PNG("$(visu.plot_path)loss_at_epoch-$(epoch).png"), loss_graph)
+                draw(PNG("$(visu.plot_path)loss_at_epoch-$(epoch-1).png"), loss_graph)
             end
             if visu.show_plots
                 draw(PNG(), loss_graph)
@@ -223,7 +231,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
         if visu.plot_correlation && (epoch % visu.plot_every == 0)
             correl_graph = plot_correlation(correlations)
             if visu.save_plots
-                draw(PNG("$(visu.plot_path)correlation_at_epoch-$(epoch).png"), correl_graph)
+                draw(PNG("$(visu.plot_path)correlation_at_epoch-$(epoch-1).png"), correl_graph)
             end
             if visu.show_plots
                 draw(PNG(), correl_graph)
@@ -233,7 +241,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
         if visu.plot_accuracy && (epoch % visu.plot_every == 0)
             accur_graph = plot_accuracy(obtained, e_test, visu.accuracy_subset, epoch)
             if visu.save_plots
-                draw(PNG("$(visu.plot_path)accuracy_at_epoch-$(epoch).png"), accur_graph)
+                draw(PNG("$(visu.plot_path)accuracy_at_epoch-$(epoch-1).png"), accur_graph)
             end
             if visu.show_plots
                 draw(PNG(), accur_graph)
@@ -251,11 +259,11 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
 end
 
 # Datafile struct
-files = ["/home/golem/rpool/scratch/jacquinn/data/13H107-k31.h5",
-         "/home/golem/rpool/scratch/jacquinn/data/14H171.h5"
+files = [#"/home/golem/rpool/scratch/jacquinn/data/14H171.h5",
+         "/home/golem/rpool/scratch/jacquinn/data/13H107-k31.h5"
         ]
-datasets = ["13H107-k31_min-5_ALL",
-            "14H171_min-5_ALL"
+datasets = [#"14H171_min-5_ALL",
+            "13H107-k31_min-5_ALL"
            ]
 data = Datafile(files, datasets)
 
@@ -263,7 +271,7 @@ data = Datafile(files, datasets)
 hyper = Hyperparams(training_rate=0.000001, use_log_counts=true, l2_multiplier=1)
 
 # Plotparams struct
-folder = "/u/jacquinn/graphs/L2_and_log_0.000001tr_more_neurones/"
-visu = Plotparams(plot_every=1, plot_path=folder, plot_correlation=false, save_plots=false)
+folder = "/u/jacquinn/graphs_fixed_loss/0.000001tr_agg_sum/"
+visu = Plotparams(plot_every=2, plot_path=folder, plot_correlation=false, show_plots=false)
 
-train_and_plot(data, hyper, visu, device=gpu, nohup=false)
+train_and_plot(data, hyper, visu, device=gpu, nohup=true)
