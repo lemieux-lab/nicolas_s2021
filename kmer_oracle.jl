@@ -7,6 +7,7 @@ using HDF5
 using Cairo
 using Dates
 using JLD2
+using BSON: @save
 using FileIO
 
 include("kmer_utils.jl")
@@ -22,6 +23,9 @@ end
 Base.@kwdef struct Datafile
     paths::Array{String, 1}
     datasets::Array{String, 1}
+    save_model::Bool=true
+    save_every::Int64=5
+    model_path::String=""
 end
 
 Base.@kwdef struct Plotparams
@@ -34,6 +38,7 @@ Base.@kwdef struct Plotparams
     plot_every::Int32=5
     accuracy_subset::Int32=100000
 end
+
 
 function evaluate_loss(loss::Function, kmers::Array{Bool, 2}, counts::Array{Float64, 2}; device::Function=cpu)
     dl = Flux.Data.DataLoader((kmers, counts), batchsize=2048)
@@ -118,7 +123,6 @@ end
 function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; device::Function=cpu, nohup::Bool=false)
 
     # This calculates an L2 regularization for the loss
-    # TODO: divide by the number of params
     function L2_penalty() # = sum(sum.(abs2, network.W)) + sum(sum.(abs2, network.b))
         penalty = 0
         for layer in network
@@ -126,6 +130,14 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
         end
         return penalty
     end
+
+    # function L2_penalty()
+    #     penalty = 0
+    #     for layer in network
+    #         penalty += sum(abs2, layer.W)
+    #     end
+    #     return penalty
+    # end
 
     # Saving params if plots are saved aswell
     if visu.save_plots
@@ -165,7 +177,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
 
     # Preparing hyperparams
     network = neural_network() |> device
-    loss(input, expected) = Flux.Losses.mse(network(input), expected, agg=sum) + (L2_penalty() * hyper.l2_multiplier)
+    loss(input, expected) = Flux.Losses.mse(network(input), expected) + (L2_penalty() * hyper.l2_multiplier)
     dl_train = Flux.Data.DataLoader((i_train, e_train), batchsize=hyper.batchsize, shuffle=true)
     opt = Flux.ADAM(hyper.training_rate)
     ps = Flux.params(network)
@@ -198,6 +210,10 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
             if visu.plot_correlation
                 push!(correlations, cor(results, e_test))
             end
+        end
+
+        if data.save_model
+            @save "$(data.model_path)model_at_epoch-$(epoch-1).bson" network
         end
 
         if nohup
@@ -259,19 +275,21 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
 end
 
 # Datafile struct
-files = [#"/home/golem/rpool/scratch/jacquinn/data/14H171.h5",
+files = [# "/home/golem/rpool/scratch/jacquinn/data/14H171.h5",
          "/home/golem/rpool/scratch/jacquinn/data/13H107-k31.h5"
         ]
 datasets = [#"14H171_min-5_ALL",
             "13H107-k31_min-5_ALL"
            ]
-data = Datafile(files, datasets)
+
+model_path = ""
+data = Datafile(files, datasets, model_path=model_path, save_every=1)
 
 # Hyperparams struct
-hyper = Hyperparams(training_rate=0.000001, use_log_counts=true, l2_multiplier=1)
+hyper = Hyperparams(training_rate=0.0000001, use_log_counts=true, l2_multiplier=1)
 
 # Plotparams struct
-folder = "/u/jacquinn/graphs_fixed_loss/0.000001tr_agg_sum/"
-visu = Plotparams(plot_every=2, plot_path=folder, plot_correlation=false, show_plots=false)
+folder = "/u/jacquinn/graphs_fixed_loss/0.0000001tr_re-run/"
+visu = Plotparams(plot_every=1, plot_path=folder, plot_correlation=false, show_plots=false)
 
 train_and_plot(data, hyper, visu, device=gpu, nohup=true)
