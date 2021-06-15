@@ -11,8 +11,11 @@ Les fichiers .h5 sont les fichiers parsés pour la version actuelle. Leurs struc
 
 
 📁: counts
+
  └ :1234: {nom de l'échantillon}
+ 
 📁: kmers
+
 └ :1234: {nom de l'échantillon}
 
 
