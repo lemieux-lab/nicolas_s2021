@@ -17,7 +17,9 @@ Base.@kwdef struct Hyperparams
     training_rate::Float32=0.001
     batchsize::Int64=2048
     use_log_counts::Bool=true
+    substract_average::Bool=true
     l2_multiplier::Float32=1
+    use_training_set::Bool=true
 end
 
 Base.@kwdef struct Datafile
@@ -32,6 +34,7 @@ Base.@kwdef struct Plotparams
     plot_loss::Bool=true
     plot_correlation::Bool=true
     plot_accuracy::Bool=true
+    plot_l2::Bool=true
     show_plots::Bool=true
     save_plots::Bool=true
     plot_path::String=""
@@ -67,6 +70,22 @@ function evaluate_results(network, testing_set::Array{Bool, 2}; device::Function
     return o_test
 end
 
+function generate_fake_data(size::Int64=1000000)
+    kmers = Array{Bool, 2}(undef, 124, size)
+    values = Array{Float64, 1}(undef, size)
+    iter = ProgressBar(1:size)
+    set_description(iter, "Generating data...")
+
+    for i in iter
+        to_add = rand(Bool, 124)
+        f(x) = x
+        value = count(f, to_add[1:31]) - count(f, to_add[32:64]) + count(f, to_add[65:95]) - + count(f, to_add[96:end])
+        kmers[:,i] = to_add
+        values[i] = value
+    end
+    return (kmers, values)
+end
+
 function neural_network(k::Int64=31)
     return Chain(
             Dense(4*k, 700, relu),
@@ -76,11 +95,36 @@ function neural_network(k::Int64=31)
             )
 end
 
+# function neural_network(k::Int64=31)
+#     return Chain(
+#         Parallel(vcat, 
+#             Dense(k, 100),
+#             Dense(k, 100),
+#             Dense(k, 100),
+#             Dense(k, 100)
+#         ),
+#         Dense(400, 1)
+#     )
+# end
+
 function plot_loss(train_losses::Vector{Float32}, test_losses::Vector{Float32})
     df = DataFrame(train = train_losses, test = test_losses, epoch=0:length(train_losses)-1)
     graph = plot(stack(df, [:train, :test]), x=:epoch, y=:value, 
             color=:variable, Guide.xlabel("Epoch"), Guide.ylabel("Loss"), 
             Guide.title("Loss per epoch"), Theme(panel_fill="white"), Geom.line)
+    return graph
+end
+
+function plot_loss_with_l2(train_losses::Vector{Float32}, test_losses::Vector{Float32}, l2_values::Vector{Float32})
+    df = DataFrame(train = train_losses, test = test_losses, 
+                   l2 = l2_values, epoch=0:length(train_losses)-1)
+    df = stack(df, [:train, :test])
+    rename!(df, Dict(:variable => "set", :value => "loss"))
+    df = stack(df, [:l2, :loss])
+    df[df.variable.== "l2", "set"].="l2"
+    graph = plot(df, ygroup = "variable", x="epoch", y="value", color="set", 
+                 Geom.subplot_grid(Geom.line, free_y_axis=true),
+                 Guide.title("Loss & L2 per epoch"), Theme(panel_fill="white"))
     return graph
 end
 
@@ -99,6 +143,17 @@ function plot_accuracy(obtained, expected, subset, epoch)
             Guide.xlabel("Expected"), Guide.ylabel("Obtained"),
             Guide.title("Accuracy at epoch $(epoch-1)"), Theme(panel_fill="white"),
             Geom.point)
+    return graph
+end
+
+function plot_hex_accuracy(obtained, expected, subset, epoch)
+    subset_indexes = rand(1:length(obtained), subset)
+    sub_obtained = obtained[subset_indexes]
+    sub_expected = expected[subset_indexes]
+    graph = plot(x=sub_expected, y=sub_obtained, 
+            Guide.xlabel("Expected"), Guide.ylabel("Obtained"),
+            Guide.title("Accuracy at epoch $(epoch-1)"), Theme(panel_fill="white"),
+            Geom.hexbin, Geom.abline)
     return graph
 end
 
@@ -121,7 +176,6 @@ function read_files(data::Datafile; k::Int64=31, nohup::Bool=false)
 end
 
 function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; device::Function=cpu, nohup::Bool=false)
-
     # This calculates an L2 regularization for the loss
     function L2_penalty() # = sum(sum.(abs2, network.W)) + sum(sum.(abs2, network.b))
         penalty = 0
@@ -145,21 +199,23 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
                   Dict("hyper"=>hyper, "visu"=>visu, "data"=>data))
     end
 
-    # Reading data
-    # h5_file = h5open(data.path, "r")
-    # all_kmers = read(h5_file["kmers/$(data.dataset)"])
-    # all_counts = read(h5_file["counts/$(data.dataset)"])
-    # close(h5_file)
     all_kmers, all_counts = read_files(data, nohup=nohup)
-    
+    # all_kmers, all_counts = generate_fake_data()
 
     # Apply log counts
     if hyper.use_log_counts
         all_counts = log.(10, all_counts)
     end
 
+    aver = mean(all_counts)
+    println("Average exected value: $aver")
+
+    if hyper.substract_average
+        all_counts = all_counts .- aver
+    end
+
     # Splitting into sets
-    i_train, e_train, i_test, e_test = split_kmer_data(all_kmers, all_counts, 97)
+    i_train, e_train, i_test, e_test = split_kmer_data(all_kmers, all_counts, 90, hyper.use_training_set)
     e_train = reshape(e_train, 1, length(e_train))
     e_test = reshape(e_test, 1, length(e_test))
     # println(onehot_kmer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") in eachcol(i_train))
@@ -178,6 +234,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
     # Preparing hyperparams
     network = neural_network() |> device
     loss(input, expected) = Flux.Losses.mse(network(input), expected) + (L2_penalty() * hyper.l2_multiplier)
+    # loss(input, expected) = Flux.Losses.huber_loss(network(input), expected) + (L2_penalty() * hyper.l2_multiplier)
     dl_train = Flux.Data.DataLoader((i_train, e_train), batchsize=hyper.batchsize, shuffle=true)
     opt = Flux.ADAM(hyper.training_rate)
     ps = Flux.params(network)
@@ -187,6 +244,7 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
     testing_losses = Float32[]
     correlations = Float32[]
     obtained = Float32[]
+    l2_values = Float32[]
     
     # This is where the fun begins. Main training loop
     epoch = 0
@@ -201,6 +259,9 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
         if visu.plot_loss
             push!(losses, evaluate_loss(loss, i_train, e_train, device=device))
             push!(testing_losses, evaluate_loss(loss, i_test, e_test, device=device))
+            if visu.plot_l2
+                push!(l2_values, hyper.l2_multiplier * L2_penalty())
+            end
         end
 
         if visu.plot_correlation || visu.plot_accuracy
@@ -213,7 +274,8 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
         end
 
         if data.save_model
-            @save "$(data.model_path)model_at_epoch-$(epoch-1).bson" network
+            model = cpu(network)
+            @save "$(data.model_path)model_at_epoch-$(epoch-1).bson" model
         end
 
         if nohup
@@ -235,7 +297,11 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
 
         # Plots loss tracking data every X epoch
         if visu.plot_loss && (epoch % visu.plot_every == 0)
-            loss_graph = plot_loss(losses, testing_losses)
+            if visu.plot_l2
+                loss_graph = plot_loss_with_l2(losses, testing_losses, l2_values)
+            else
+                loss_graph = plot_loss(losses, testing_losses)
+            end
             if visu.save_plots
                 draw(PNG("$(visu.plot_path)loss_at_epoch-$(epoch-1).png"), loss_graph)
             end
@@ -262,6 +328,14 @@ function train_and_plot(data::Datafile, hyper::Hyperparams, visu::Plotparams; de
             if visu.show_plots
                 draw(PNG(), accur_graph)
             end
+            # Nan bug with log counts? FIXME
+            # accur_graph = plot_hex_accuracy(obtained, e_test, visu.accuracy_subset, epoch)
+            # if visu.save_plots
+            #     draw(PNG("$(visu.plot_path)hex_accuracy_at_epoch-$(epoch-1).png"), accur_graph)
+            # end
+            # if visu.show_plots
+            #     draw(PNG(), accur_graph)
+            # end
         end
 
         #Show reports
@@ -282,14 +356,17 @@ datasets = [#"14H171_min-5_ALL",
             "13H107-k31_min-5_ALL"
            ]
 
-model_path = ""
-data = Datafile(files, datasets, model_path=model_path, save_every=1)
+path = "/u/jacquinn/graphs_fixed_loss/0.00001_sub_mean_no_test/"
+data = Datafile(paths=files, datasets=datasets, model_path=path, save_every=5)
 
 # Hyperparams struct
-hyper = Hyperparams(training_rate=0.0000001, use_log_counts=true, l2_multiplier=1)
+hyper = Hyperparams(training_rate=0.00001, l2_multiplier=0.5, use_training_set=false, use_log_counts=true)
 
 # Plotparams struct
-folder = "/u/jacquinn/graphs_fixed_loss/0.0000001tr_re-run/"
-visu = Plotparams(plot_every=1, plot_path=folder, plot_correlation=false, show_plots=false)
+# folder = "/u/jacquinn/graphs_fixed_loss/0.0000001tr_re-run/"
+visu = Plotparams(plot_every=5, plot_path=path, plot_correlation=false, show_plots=false)
 
 train_and_plot(data, hyper, visu, device=gpu, nohup=true)
+
+# Try subtracting average count from count values
+# Investigate model
