@@ -62,9 +62,12 @@ function onehot_kmer(kmer::String)
     return vcat(Flux.onehotbatch(kmer, ["A", "T", "G", "C"])...)
 end
 
-function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Float64, 1}, split_indice::Int64)
+function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Float64, 1}, split_indice::Int64, no_test::Bool=false)
     if split_indice > 100 || split_indice < 1
         return
+    end
+    if no_test
+        return kmers, counts, kmers[:, split_index+1:end], counts[:, split_index+1:end]
     end
     split_index = (length(counts)*split_indice)÷100
     return kmers[:, 1:split_index], counts[1:split_index], kmers[:, split_index+1:end], counts[split_index+1:end]
@@ -93,10 +96,8 @@ end
 
 # parsed_df = parse_kmer_count("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_min-5.FASTA", max_kmers = 300000)
 
-# ↓ About 8.5 hours. Parses then saves the entire dataset with onehot encoded kmers in a hdf5 file.
-# ↓ GC time is over 73%, this needs to be dealt with.
-# @time kmer_to_hdf5("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_min-5.FASTA", 
-#                    "/home/golem/rpool/scratch/jacquinn/data/13H107-k31.h5", 
-#                    "13H107-k31_min-5_ALL")
+# @time kmer_to_hdf5("/home/golem/rpool/scratch/jacquinn/data/17H073_min-5.FASTA", 
+#                    "/home/golem/rpool/scratch/jacquinn/data/17H073_min-5.h5", 
+#                    "17H073_min-5_ALL")
 
 
