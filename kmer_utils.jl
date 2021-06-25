@@ -38,36 +38,52 @@ function parse_kmer_count(path::String; min_count::Int64=0, max_kmers::Int64=-1)
 end
 
 # Encodes a kmer into a onehot array based on the nucleotides
-function onehot_kmer(kmer::SubString{String})
+function onehot_kmer_old(kmer::SubString{String})
     kmer = split(kmer, "")
     return vcat(Flux.onehotbatch(kmer, ["A", "T", "G", "C"])...)
 end
 
-function onehot_kmer(kmer::String)
+function onehot_kmer_old(kmer::String)
     kmer = split(kmer, "")
     return vcat(Flux.onehotbatch(kmer, ["A", "T", "G", "C"])...)
 end
 
-function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Float64, 1}, split_indice::Int64, no_test::Bool=false)
-    if split_indice > 100 || split_indice < 1
-        return
+# New and improved onehot_kmer (about 12 times faster)
+function onehot_kmer(kmer::String, kmer_length::Int64=31)
+    # hot_kmer = Array{Bool, 2}(undef, 4, kmer_length)
+    hot_kmer = fill(false, 4, kmer_length)
+    encode_table = Dict(
+        'A' => 1,
+        'T' => 2,
+        'G' => 3,
+        'C' => 4
+    )
+    for (i, nuc) in enumerate(kmer)
+        hot_kmer[encode_table[nuc], i] = true
     end
-    if no_test
-        return kmers, counts, kmers[:, split_index+1:end], counts[:, split_index+1:end]
-    end
-    split_index = (length(counts)*split_indice)÷100
-    return kmers[:, 1:split_index], counts[1:split_index], kmers[:, split_index+1:end], counts[split_index+1:end]
+    return vcat(hot_kmer...)
 end
 
-function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Int32, 1}, split_indice::Int64, no_test::Bool=false)
+function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Float64, 2}, split_indice::Int64, no_test::Bool=false)
     if split_indice > 100 || split_indice < 1
         return
     end
+    split_index = (length(counts)*split_indice)÷100
     if no_test
         return kmers, counts, kmers[:, split_index+1:end], counts[:, split_index+1:end]
     end
+    return kmers[:, 1:split_index], counts[:, 1:split_index], kmers[:, split_index+1:end], counts[:, split_index+1:end]
+end
+
+function split_kmer_data(kmers::Array{Bool, 2}, counts::Array{Int32, 2}, split_indice::Int64, no_test::Bool=false)
+    if split_indice > 100 || split_indice < 1
+        return
+    end
     split_index = (length(counts)*split_indice)÷100
-    return kmers[:, 1:split_index], counts[1:split_index], kmers[:, split_index+1:end], counts[split_index+1:end]
+    if no_test
+        return kmers, counts, kmers[:, split_index+1:end], counts[:, split_index+1:end]
+    end
+    return kmers[:, 1:split_index], counts[:, 1:split_index], kmers[:, split_index+1:end], counts[:, split_index+1:end]
 end
 
 function kmer_to_hdf5(kmer_file::String, output_file::String, dataset_name::String; min_count::Int64=0, max_kmers::Int64=-1)
@@ -81,6 +97,8 @@ function kmer_to_hdf5(kmer_file::String, output_file::String, dataset_name::Stri
         h5_file["counts"][dataset_name] = counts
     end
 end
+
+# parsed_df = parse_kmer_count("/home/golem/rpool/scratch/jacquinn/data/13H107-k31_min-5.FASTA", max_kmers = 300000)
 
 # @time kmer_to_hdf5("/home/golem/rpool/scratch/jacquinn/data/17H073_min-5.FASTA", 
 #                    "/home/golem/rpool/scratch/jacquinn/data/17H073_min-5.h5", 
