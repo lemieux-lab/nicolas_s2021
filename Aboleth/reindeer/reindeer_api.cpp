@@ -40,10 +40,21 @@ extern "C" void *load_index(char *reindeer_dir) {
 	get_position_vector_query_disk(position_in_file, position_file_name, nb_monotig);
 	// index_values to_return =  index_values(ksl, nb_colors, k, record_counts, compr_monotig_color, compr_monotig_color_sizes, matrix_name, eq_class_nb, nb_monotig, position_in_file);
 	// return to_return;
-	Index_Values index = {ksl, nb_colors, k, record_counts, compr_monotig_color, compr_monotig_color_sizes, matrix_name, eq_class_nb, nb_monotig, position_in_file};
-    g_index = &index;
-    cout << g_index << endl;
-    cout << g_index->k << endl;
+	g_index = new Index_Values();
+	g_index->ksl = ksl;
+	g_index->nb_colors = nb_colors;
+	g_index->k = k;
+	g_index->record_counts = record_counts;
+	g_index->compr_monotig_color = compr_monotig_color;
+	g_index->compr_monotig_color_sizes = compr_monotig_color_sizes;
+	g_index->matrix_name = matrix_name;
+	g_index->eq_class_nb = eq_class_nb;
+	g_index->nb_monotig = nb_monotig;
+	g_index->position_in_file = position_in_file;
+// matrix_name, eq_class_nb, nb_monotig, position_in_file};
+    // g_index = &index;
+    // cout << g_index << endl;
+    // cout << g_index->k << endl;
     // return g_index;
 }
 
