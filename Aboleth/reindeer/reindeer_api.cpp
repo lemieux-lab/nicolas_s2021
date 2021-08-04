@@ -59,14 +59,25 @@ extern "C" void *load_index(char *reindeer_dir) {
 }
 
 extern "C" void *query_on_loaded_index(char *query_path) {
-    cout << g_index << endl;
-    cout << g_index->k << endl;
-
+    // cout << g_index << endl;
+    // cout << g_index->k << endl;
+	if(g_index == NULL) {
+		cerr << "No index has been loaded! Use load_reindeer_index() first!" << endl;
+		return 0;
+	}
+	vector<vector<uint32_t>> query_unitigID(g_index->nb_colors,{0});
+	std::string input = std::string(query_path);
+	// cout << input.empty() << endl;
+	// cout << exists_test(input) << endl;
+	// std::string name = std::string("test");
+	string to_return = doQuery_return_results(input, *(g_index->ksl), g_index->nb_colors, g_index->k, g_index->record_counts, 40, query_unitigID, 1, g_index->compr_monotig_color, g_index->compr_monotig_color_sizes, false, g_index->matrix_name, g_index->eq_class_nb, g_index->nb_monotig, g_index->position_in_file);
+	// doQuery(input, name, *(g_index->ksl), g_index->nb_colors, g_index->k, g_index->record_counts, 40, query_unitigID, 4, g_index->compr_monotig_color, g_index->compr_monotig_color_sizes, false, g_index->matrix_name, g_index->eq_class_nb, g_index->nb_monotig, g_index->position_in_file);
+	cout << to_return << endl;
 }
 
 extern "C" void *all_at_once(char *reindeer_dir) {
     load_index(reindeer_dir);
-    query_on_loaded_index("test");
+    // query_on_loaded_index("test");
 
 }
 
