@@ -63,10 +63,11 @@ extern uint gFraise;
 extern "C" {
 #endif
 	void *load_index(char *reindeer_dir);
-    void *query_on_loaded_index(char *query_path);
+    void *query_on_loaded_index(char *query_path, int *to_build);
     void *all_at_once(char *reindeer_dir);
     uint fraise();
     uint fraise2();
+	void test_table(int to_add, int *table);
 #ifdef __cplusplus
 }
 #endif

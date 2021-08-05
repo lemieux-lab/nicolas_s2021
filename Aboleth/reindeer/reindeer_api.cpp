@@ -58,7 +58,7 @@ extern "C" void *load_index(char *reindeer_dir) {
     // return g_index;
 }
 
-extern "C" void *query_on_loaded_index(char *query_path) {
+extern "C" void *query_on_loaded_index(char *query_path, int *to_build) {
     // cout << g_index << endl;
     // cout << g_index->k << endl;
 	if(g_index == NULL) {
@@ -70,9 +70,9 @@ extern "C" void *query_on_loaded_index(char *query_path) {
 	// cout << input.empty() << endl;
 	// cout << exists_test(input) << endl;
 	// std::string name = std::string("test");
-	string to_return = doQuery_return_results(input, *(g_index->ksl), g_index->nb_colors, g_index->k, g_index->record_counts, 40, query_unitigID, 1, g_index->compr_monotig_color, g_index->compr_monotig_color_sizes, false, g_index->matrix_name, g_index->eq_class_nb, g_index->nb_monotig, g_index->position_in_file);
+	api_query(input, to_build, *(g_index->ksl), g_index->nb_colors, g_index->k, g_index->record_counts, 40, query_unitigID, 1, g_index->compr_monotig_color, g_index->compr_monotig_color_sizes, false, g_index->matrix_name, g_index->eq_class_nb, g_index->nb_monotig, g_index->position_in_file);
 	// doQuery(input, name, *(g_index->ksl), g_index->nb_colors, g_index->k, g_index->record_counts, 40, query_unitigID, 4, g_index->compr_monotig_color, g_index->compr_monotig_color_sizes, false, g_index->matrix_name, g_index->eq_class_nb, g_index->nb_monotig, g_index->position_in_file);
-	cout << to_return << endl;
+	// cout << to_return << endl;
 }
 
 extern "C" void *all_at_once(char *reindeer_dir) {
@@ -93,4 +93,12 @@ extern "C" uint fraise() {
     cout << gFraise << endl;
     cout << &gFraise << endl;
     return gFraise;
+}
+
+extern "C" void test_table(int to_add, int *table) {
+	// cout << table.size() << endl;
+	cout << table << endl;
+	table[0] = 42;
+	cout << table[2] << endl;
+	// cout << table[1] << endl;
 }
