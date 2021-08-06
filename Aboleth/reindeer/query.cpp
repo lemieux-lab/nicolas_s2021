@@ -278,7 +278,7 @@ void write_results_above_threshold(string& toWrite, vector<vector<uint16_t>>& qu
 	toWrite += "\n";
 }
 
-void build_results_above_threshold(int *to_build , vector<vector<uint16_t>>& query_counts, uint64_t color_number , vector<string>& toW, vector<string>& color_counts,  string& header, bool record_counts, uint threshold, string& line, uint k, vector<uint>& covered_positions) {
+void build_results_above_threshold(int *to_build , vector<vector<uint16_t>>& query_counts, uint64_t color_number , vector<string>& toW, vector<string>& color_counts,  bool record_counts, uint threshold, string& line, uint k, vector<uint>& covered_positions) {
 	int current_sample = 0;
 	int to_add;
 	string tmp_result;
@@ -286,7 +286,7 @@ void build_results_above_threshold(int *to_build , vector<vector<uint16_t>>& que
 		if (covered_positions[cp] >=  threshold ) {
 			if (record_counts) {
 				// toWrite += "\t" + color_counts[cp];
-				cout << color_counts[cp] << endl;
+				// cout << color_counts[cp] << endl;
 				tmp_result = color_counts[cp].substr(4, color_counts[cp].length());
 				to_add = 0;
 				if (tmp_result != "*") {
@@ -307,11 +307,11 @@ void write_output(vector<int64_t>& kmers_colors, string& toWrite,bool record_cou
 	write_results_above_threshold( toWrite,query_counts, color_number , toW,  color_counts, header, record_counts, threshold, line, k, covered_positions);
 }
 
-void build_output(vector<int64_t>& kmers_colors, int *to_build, bool record_counts, vector<vector<uint32_t>>& query_unitigID,vector<vector<uint32_t>>& query_unitigID_tmp,  uint64_t& color_number, string& header, string& line, uint k, uint threshold,  vector<vector<uint16_t>>& query_counts, vector<vector<uint8_t>>& query_colors){
+void build_output(vector<int64_t>& kmers_colors, int *to_build, bool record_counts, vector<vector<uint32_t>>& query_unitigID,vector<vector<uint32_t>>& query_unitigID_tmp,  uint64_t& color_number, string& line, uint k, uint threshold,  vector<vector<uint16_t>>& query_counts, vector<vector<uint8_t>>& query_colors){
 	vector<string> color_counts;
 	vector<string> toW(color_number,"");
 	vector<uint> covered_positions = write_count_output(record_counts, query_counts, color_number, toW, color_counts,k );
-	build_results_above_threshold(to_build, query_counts, color_number , toW,  color_counts, header, record_counts, threshold, line, k, covered_positions);
+	build_results_above_threshold(to_build, query_counts, color_number , toW,  color_counts, record_counts, threshold, line, k, covered_positions);
 }
 
 void doQuery(string& input, string& name, kmer_Set_Light& ksl, uint64_t& color_number, uint k, bool record_counts, uint threshold,vector<vector<uint32_t>>& query_unitigID, uint nb_threads,  vector<unsigned char*>& compr_monotig_color, vector<unsigned >& compr_monotig_color_size, bool do_query_on_disk, string& rd_file, long eq_class_nb, uint64_t nb_monotig, vector<long>& position_in_file)
@@ -386,7 +386,7 @@ void doQuery(string& input, string& name, kmer_Set_Light& ksl, uint64_t& color_n
 void api_query(string& input, int *to_build, kmer_Set_Light& ksl, uint64_t& color_number, uint k, bool record_counts, uint threshold,vector<vector<uint32_t>>& query_unitigID, uint nb_threads,  vector<unsigned char*>& compr_monotig_color, vector<unsigned >& compr_monotig_color_size, bool do_query_on_disk, string& rd_file, long eq_class_nb, uint64_t nb_monotig, vector<long>& position_in_file)
 {
 
-	ifstream query_file(input);
+	// ifstream query_file(input);
 	
 	// ofstream out(name);
 	// string to_return = "";
@@ -397,57 +397,57 @@ void api_query(string& input, int *to_build, kmer_Set_Light& ksl, uint64_t& colo
 	vector<vector<uint32_t>> query_unitigID_tmp;
 	// cout << "doQuery init done" << endl;
 	// FOR EACH LINE OF THE QUERY FILE
-	bool first(true);
-	while(not query_file.eof()){
-		#pragma omp parallel num_threads(nb_threads)
-		{
-			#pragma omp critical(i_file)
-			{
-				//~ uint i(0);
-				// cout << input << endl;
-				lines = getLineFasta_buffer2(&query_file, 4000, k);
-			}
-			uint i;
-			#pragma omp for ordered
-			for(i=(0);i<lines.size();i+=2)
-			{
-				uint j(i);
+	// bool first(true);
+	// while(not query_file.eof()){
+	// 	#pragma omp parallel num_threads(nb_threads)
+	// 	{
+	// 		#pragma omp critical(i_file)
+	// 		{
+	// 			//~ uint i(0);
+	// 			// cout << input << endl;
+	// 			lines = getLineFasta_buffer2(&query_file, 4000, k);
+	// 		}
+	// 		uint i;
+	// 		#pragma omp for ordered
+	// 		for(i=(0);i<lines.size();i+=2)
+	// 		{
+	// 			uint j(i);
 				
-				// cout << "1" << endl;
-				if (i%1000 == 0)
-					cout << "-";
-				string toWrite;
-				string header;
-				while (j < i+2)
-				{	
+	// 			// cout << "1" << endl;
+	// 			if (i%1000 == 0)
+	// 				cout << "-";
+	// 			string toWrite;
+	// 			string header;
+	// 			while (j < i+2)
+	// 			{	
 					// cout << "[" << lines << "]" << endl;
 					// cout << j << endl;
 					// cout << lines.size() << endl;
 					// cout << lines[j] << endl;
-					string line=lines[j];
+					// string line=lines[j];
 					// cout << "4" << endl;
-					if (j%2 == 1)
-					{
-						cout << "2" << endl;
-						vector<int64_t> kmers_colors;
-						vector<string> color_counts;
-						vector<int64_t> kmer_ids;
-						kmer_ids=ksl.get_rank_query(line);
-						cout << "3" << endl;
-						vector<vector<uint16_t>> query_counts;
-						vector<vector<uint8_t>> query_colors;
-						get_colors_counts_query_eq_classes( kmer_ids, color_number, query_counts,  compr_monotig_color, compr_monotig_color_size, position_in_file, record_counts, query_colors, do_query_on_disk, rd_file);
-						mm.lock();
-						build_output( kmers_colors, to_build,  record_counts,  query_unitigID,query_unitigID_tmp,  color_number, header, line, k, threshold, query_counts, query_colors);
-						mm.unlock();
-					}
-					else 
-					{
-						header = line;
-						// cout << "5" << endl;
-					}
-					j++;
-				}
+					// if (j%2 == 1)
+					// {
+	// cout << "2" << endl;
+	vector<int64_t> kmers_colors;
+	vector<string> color_counts;
+	vector<int64_t> kmer_ids;
+	kmer_ids=ksl.get_rank_query(input);
+	// cout << "3" << endl;
+	vector<vector<uint16_t>> query_counts;
+	vector<vector<uint8_t>> query_colors;
+	get_colors_counts_query_eq_classes( kmer_ids, color_number, query_counts,  compr_monotig_color, compr_monotig_color_size, position_in_file, record_counts, query_colors, do_query_on_disk, rd_file);
+	mm.lock();
+	build_output( kmers_colors, to_build,  record_counts,  query_unitigID,query_unitigID_tmp,  color_number, input, k, threshold, query_counts, query_colors);
+	mm.unlock();
+					// }
+					// else 
+					// {
+					// 	header = line;
+					// 	// cout << "5" << endl;
+					// }
+					// j++;
+				// }
 				// #pragma omp ordered
 				// mm.lock();
 				// if (toWrite != header +"\n")
@@ -456,13 +456,13 @@ void api_query(string& input, int *to_build, kmer_Set_Light& ksl, uint64_t& colo
 				// 	// to_return += toWrite;
 				// }
 				// mm.unlock();
-			}
-		}
+			// }
+		// }
 		// lines={};
-	}
+	// }
 	// cout << "threading bs done" << endl;
-	cout << endl;
-	query_file.close();
+	// cout << endl;
+	// query_file.close();
 	// out.close();
 	// return to_return;
 }

@@ -78,3 +78,8 @@ function kmer_to_hdf5(kmer_file::String, output_file::String, dataset_name::Stri
         h5_file["counts"][dataset_name] = counts
     end
 end
+
+function get_random_kmers(set_length::Int64=100, k::Int64=31)
+    nucs = ["A", "T", "G", "C"]
+    return [join([nucs[rand(1:length(nucs))] for j in 1:k]) for i in 1:set_length]
+end

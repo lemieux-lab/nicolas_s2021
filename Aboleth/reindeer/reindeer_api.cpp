@@ -58,7 +58,7 @@ extern "C" void *load_index(char *reindeer_dir) {
     // return g_index;
 }
 
-extern "C" void *query_on_loaded_index(char *query_path, int *to_build) {
+extern "C" void *query_on_loaded_index(char *kmer, int *to_build) {
     // cout << g_index << endl;
     // cout << g_index->k << endl;
 	if(g_index == NULL) {
@@ -66,7 +66,7 @@ extern "C" void *query_on_loaded_index(char *query_path, int *to_build) {
 		return 0;
 	}
 	vector<vector<uint32_t>> query_unitigID(g_index->nb_colors,{0});
-	std::string input = std::string(query_path);
+	std::string input = std::string(kmer);
 	// cout << input.empty() << endl;
 	// cout << exists_test(input) << endl;
 	// std::string name = std::string("test");
