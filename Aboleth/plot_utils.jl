@@ -12,6 +12,7 @@ end
 function plot_loss_with_l2(train_losses::Vector{Float32}, test_losses::Vector{Float32}, l2_values::Vector{Float32})
     df = DataFrame(train = train_losses, test = test_losses, 
                    l2 = l2_values, epoch=0:length(train_losses)-1)
+    # println(df)
     df = stack(df, [:train, :test])
     rename!(df, Dict(:variable => "set", :value => "loss"))
     df = stack(df, [:l2, :loss])
@@ -23,24 +24,32 @@ function plot_loss_with_l2(train_losses::Vector{Float32}, test_losses::Vector{Fl
     return graph
 end
 
-function plot_accuracy(obtained, expected, subset, epoch)
-    subset_indexes = rand(1:length(obtained), subset)
-    sub_obtained = obtained[subset_indexes]
-    sub_expected = expected[subset_indexes]
-    graph = plot(x=sub_expected, y=sub_obtained, 
+function plot_accuracy(obtained, expected, epoch)
+    sample_names = ["s$i" for i in 1:(size(obtained)[2])]
+    df_obtained = stack(DataFrame(obtained, sample_names), sample_names)
+    df_expected = stack(DataFrame(expected, sample_names), sample_names)
+    rename!(df_obtained, Dict(:variable => "sample", :value => "obtained"))
+    rename!(df_expected, Dict(:variable => "sample", :value => "expected"))
+    to_plot = df_obtained
+    to_plot[!, "expected"] = df_expected[!, "expected"]
+    graph = plot(to_plot, x=:expected, y=:obtained, 
             Guide.xlabel("Expected"), Guide.ylabel("Obtained"),
             Guide.title("Accuracy at epoch $(epoch-1)"), Theme(panel_fill="white"),
-            Geom.point)
+            color=:sample, Geom.point)
     return graph
 end
 
-function plot_hex_accuracy(obtained, expected, subset, epoch)
-    subset_indexes = rand(1:length(obtained), subset)
-    sub_obtained = obtained[subset_indexes]
-    sub_expected = expected[subset_indexes]
-    graph = plot(x=sub_expected, y=sub_obtained, 
+function plot_hex_accuracy(obtained, expected, epoch)
+    sample_names = ["s$i" for i in 1:(size(obtained)[2])]
+    df_obtained = stack(DataFrame(obtained, sample_names), sample_names)
+    df_expected = stack(DataFrame(expected, sample_names), sample_names)
+    rename!(df_obtained, Dict(:variable => "sample", :value => "obtained"))
+    rename!(df_expected, Dict(:variable => "sample", :value => "expected"))
+    to_plot = df_obtained
+    to_plot[!, "expected"] = df_expected[!, "expected"]
+    graph = plot(to_plot, x=:expected, y=:obtained, 
             Guide.xlabel("Expected"), Guide.ylabel("Obtained"),
             Guide.title("Accuracy at epoch $(epoch-1)"), Theme(panel_fill="white"),
-            Geom.hexbin, Geom.abline)
+            color=:sample, Geom.hexbin, Geom.abline)
     return graph
 end
