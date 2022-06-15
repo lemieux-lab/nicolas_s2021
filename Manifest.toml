@@ -1,0 +1,45 @@
+# This file is machine-generated - editing it directly is not advised
+
+julia_version = "1.7.2"
+manifest_format = "2.0"
+
+[[deps.ArgParse]]
+deps = ["Logging", "TextWrap"]
+git-tree-sha1 = "3102bce13da501c9104df33549f511cd25264d7d"
+uuid = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+version = "1.1.4"
+
+[[deps.GZip]]
+deps = ["Libdl"]
+git-tree-sha1 = "039be665faf0b8ae36e089cd694233f5dee3f7d6"
+uuid = "92fee26a-97fe-5a0c-ad85-20a5f3185b63"
+version = "0.5.1"
+
+[[deps.Libdl]]
+uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
+
+[[deps.Logging]]
+uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
+
+[[deps.Printf]]
+deps = ["Unicode"]
+uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[[deps.ProgressBars]]
+deps = ["Printf"]
+git-tree-sha1 = "806ebc92e1b4b4f72192369a28dfcaf688566b2b"
+uuid = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
+version = "1.4.1"
+
+[[deps.RedefStructs]]
+git-tree-sha1 = "523763a2fb599190213f96f2fa860e9295def201"
+uuid = "91f8d46f-6a72-421b-a56e-b73459bd5e0a"
+version = "0.1.2"
+
+[[deps.TextWrap]]
+git-tree-sha1 = "9250ef9b01b66667380cf3275b3f7488d0e25faf"
+uuid = "b718987f-49a8-5099-9789-dcd902bef87d"
+version = "1.0.1"
+
+[[deps.Unicode]]
+uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"

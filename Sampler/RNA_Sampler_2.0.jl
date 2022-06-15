@@ -2,7 +2,11 @@ using ArgParse
 using GZip
 using ProgressBars
 using Dates
-import Random
+using Random
+
+using RedefStructs
+# @redef struct blabla ...
+
 
 # Warning
 # Currently set up to write to actual files instead of FIFOS.
@@ -86,12 +90,12 @@ function prep_fifos(parsed_args)
         end
 
         for p in probs
-            # run(`mkfifo $temp_folder/$p\%-$r1_name`)
-            run(`touch $temp_folder/$p\%-$r1_name`)
+            run(`mkfifo $temp_folder/$p\%-$r1_name`)
+            # run(`touch $temp_folder/$p\%-$r1_name`)
             push!(probs_files[p][1], "$temp_folder/$p%-$r1_name")
             
-            # run(`mkfifo $temp_folder/$p\%-$r2_name`)
-            run(`touch $temp_folder/$p\%-$r2_name`)
+            run(`mkfifo $temp_folder/$p\%-$r2_name`)
+            # run(`touch $temp_folder/$p\%-$r2_name`)
             push!(probs_files[p][2], "$temp_folder/$p%-$r2_name")
 
         end
@@ -113,14 +117,15 @@ function prep_fifos(parsed_args)
     return sample_matrice, salmon_commands
 end
 
-function start_extraction(sample_matrice::Pair{Vector{Vector{String}}, Vector{Vector{String}}}, salmon_commands::Vector{Cmd}, parsed_args)
+function start_extraction(sample_matrice::Pair{Vector{Vector{String}}, Vector{Vector{String}}},
+                          salmon_commands::Vector{Cmd}, parsed_args)
     probs = [2]
     out_rep = parsed_args["out"] * "/samples"
     temp_folder = parsed_args["temp_folder"] * "/samples"
     for (s, (samples_r1, samples_r2)) in enumerate(zip(sample_matrice[1], sample_matrice[2]))
         to_iter = vcat(samples_r1, samples_r2)
         # println(to_iter)
-        # run(salmon_commands[s])
+        run(salmon_commands[s])
         for (sample) in to_iter
 
             # sample_r2 = replace(sample_r1, "R1" => "R2")
@@ -174,7 +179,7 @@ function start_extraction(sample_matrice::Pair{Vector{Vector{String}}, Vector{Ve
                 # end
             end
         end
-        run(salmon_commands[s])
+        # run(salmon_commands[s])
     end
 end
 
